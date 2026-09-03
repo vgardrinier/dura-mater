@@ -12,8 +12,13 @@ npx dura-mater
 That is the full setup. It detects local Codex and Claude Code sessions, creates
 `~/.dura-mater/USER.md`, `VOICE.md`, and `sources.json`, then shows agent actions,
 important decisions, review, corrections, and blind acceptance from the last seven
-days. Only then may it ask one short profile question. `npx dura-mater install`
-works too.
+days. On an interactive first run it asks three short questions, maps coaching
+frequency to an intervention threshold, and stores the answers plainly in
+`USER.md`. The whole flow takes under a minute. Non-interactive runs skip the
+questions safely. `npx dura-mater install` works too.
+
+Running the command again refreshes the sources without overwriting `USER.md` or
+`VOICE.md`.
 
 The installer never changes Codex or Claude Code settings. Data stays local.
 
