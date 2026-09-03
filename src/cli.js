@@ -1,4 +1,4 @@
-import { install } from "./install.js";
+import { install, userMarkdown } from "./install.js";
 import fs from "node:fs";
 import readline from "node:readline/promises";
 
@@ -20,15 +20,29 @@ export function formatResult(result, color = false) {
   ].join("\n");
 }
 
-async function askOneQuestion(state, input, output) {
-  if (!input.isTTY || !output.isTTY || !state.result.actions) return;
-  const profile = fs.readFileSync(state.userFile, "utf8");
-  if (!profile.includes("## Skills I want to keep\n\nNot set yet")) return;
+const modes = {
+  "1": { frequency: "only when it really matters", sensitivity: "critical", threshold: "0.90" },
+  "2": { frequency: "a few times per session", sensitivity: "balanced", threshold: "0.65" },
+  "3": { frequency: "coach me hard", sensitivity: "intense", threshold: "0.40" },
+};
+
+export async function onboard(state, input, output) {
+  if (!state.isFirstRun || !input.isTTY || !output.isTTY) return null;
+  output.write("\nTell me what you're building and what you care about getting good at. Then I'll know when to leave you alone and when to push.\n\n");
   const rl = readline.createInterface({ input, output });
   try {
-    const answer = (await rl.question("\nOne question: what skill do you refuse to lose? ")).trim();
-    if (answer) fs.writeFileSync(state.userFile, profile.replace("## Skills I want to keep\n\nNot set yet", `## Skills I want to keep\n\n${answer}`), { mode: 0o600 });
+    const project = (await rl.question("What are you working on? ")).trim() || "Not set yet";
+    const craft = (await rl.question("What do you want to become great at? ")).trim() || "Not set yet";
+    output.write("How often should I step in?\n  1. only when it really matters\n  2. a few times per session\n  3. coach me hard\n");
+    const mode = modes[(await rl.question("Choose 1, 2, or 3: ")).trim()] || modes["1"];
+    fs.writeFileSync(state.userFile, userMarkdown({ project, craft, ...mode }), { mode: 0o600 });
+    return { project, craft, ...mode };
   } finally { rl.close(); }
+}
+
+function firstName(profile) {
+  const match = profile.match(/^## Name\s*\n+\s*([^\n]+)/mi);
+  return match?.[1]?.trim().split(/\s+/)[0] || "";
 }
 
 export async function run(args, options = {}) {
@@ -40,7 +54,14 @@ export async function run(args, options = {}) {
   const color = Boolean(output.isTTY && !process.env.NO_COLOR);
   output.write(`\n${found.length ? `Found ${found.join(" and ")}.` : "No Codex or Claude Code sessions found."}\n\n`);
   output.write(`${formatResult(state.result, color)}\n`);
-  output.write("\nEverything stays local.\n");
-  await askOneQuestion(state, input, output);
+  const profile = await onboard(state, input, output);
+  const name = firstName(fs.readFileSync(state.userFile, "utf8"));
+  const closing = profile?.sensitivity === "intense"
+    ? "Good. Let's work. No hiding behind the agent."
+    : profile?.sensitivity === "critical"
+      ? "Alright. Go find the thing worth building. I won't bother you unless it matters."
+    : name ? `Alright, ${name}. Get to work. I'll call you out when you're coasting.`
+      : "Alright. Get to work. I'll call you out when you're coasting.";
+  output.write(`\n${closing}\n`);
   return state;
 }
