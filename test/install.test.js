@@ -190,7 +190,7 @@ test("observations alone cannot trigger, but stated craft personalizes challenge
   assert.equal(invoke("observed", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), "");
   fs.writeFileSync(path.join(profile, "USER.md"), "## You told me\n\n### Becoming great at\n\nSystems architecture\n");
   invoke("stated", { hook_event_name: "UserPromptSubmit", prompt: "Design the systems architecture" });
-  assert.match(invoke("stated", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), /You said Systems architecture/);
+  assert.match(invoke("stated", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), /Okay, your call\. How would you design this\?/);
 });
 
 test("non-TTY first run skips questions and ends with spoken activation", async () => {
