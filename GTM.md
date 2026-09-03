@@ -12,7 +12,8 @@ Vibe coders who use Codex or Claude Code every day and care about becoming more 
 
 ## Activation
 
-One command installs local Codex and Claude hooks. Dura Mater begins observing sessions automatically.
+`npx dura-mater` detects local Codex and Claude sessions and shows value before
+asking anything. No account, setup form, or separate `install` command.
 
 The first value arrives after one real task: a short recap of what the agent did, what the user changed, and which decisions the user kept.
 
