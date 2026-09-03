@@ -35,19 +35,19 @@ export function firstResult(sources, now = Date.now()) {
   return analyzeFiles(files, now);
 }
 
-function userMarkdown(a) {
-  return `# You\n\n## Strengths\n\n${a.strengths}\n\n## Skills I want to keep\n\n${a.retain}\n\n## Delegate freely\n\n${a.delegate}\n\n## Current goal\n\n${a.goal}\n\n## Coaching intensity\n\n${a.intensity}\n`;
+export function userMarkdown(a) {
+  return `# You\n\n## Working on\n\n${a.project}\n\n## Becoming great at\n\n${a.craft}\n\n## Coaching\n\n${a.frequency}\n\n## Intervention sensitivity\n\n${a.sensitivity}\n\n## Intervention threshold\n\n${a.threshold}\n`;
 }
 
 export async function install({ home = os.homedir(), configDir } = {}) {
   const target = configDir || path.join(home, ".dura-mater");
   const sources = detectSources(home);
-  const answers = { strengths: "Not set yet", retain: "Not set yet", delegate: "Not set yet", goal: "Not set yet", intensity: "normal" };
   fs.mkdirSync(target, { recursive: true, mode: 0o700 });
   const userFile = path.join(target, "USER.md");
   const voiceFile = path.join(target, "VOICE.md");
-  if (!fs.existsSync(userFile)) fs.writeFileSync(userFile, userMarkdown(answers), { mode: 0o600 });
+  const isFirstRun = !fs.existsSync(userFile);
+  if (isFirstRun) fs.writeFileSync(userFile, userMarkdown({ project: "Not set yet", craft: "Not set yet", frequency: "only when it really matters", sensitivity: "critical", threshold: "0.90" }), { mode: 0o600 });
   if (!fs.existsSync(voiceFile)) fs.writeFileSync(voiceFile, defaultVoice, { mode: 0o600 });
   fs.writeFileSync(path.join(target, "sources.json"), `${JSON.stringify(sources, null, 2)}\n`, { mode: 0o600 });
-  return { target, userFile, sources, result: firstResult(sources) };
+  return { target, userFile, isFirstRun, sources, result: firstResult(sources) };
 }
