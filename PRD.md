@@ -50,8 +50,7 @@ Intervene only when all are true:
 - the user shows weak evidence of review;
 - the point has not already been raised in this session.
 
-> Hold up. This is the part your brain needs. Who should get access—and who
-> shouldn't? Say it before you ship.
+> Wait. Who should have access here?
 
 Never interrupt routine delegated work. Respect coaching intensity and support
 `mute`, `later`, and `never for this task`.
