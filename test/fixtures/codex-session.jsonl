@@ -1,0 +1,7 @@
+{"type":"session_meta","payload":{"id":"fixture","timestamp":"2099-01-01T00:00:00Z","cwd":"/tmp/project"}}
+{"type":"event_msg","payload":{"type":"user_message","message":"Change authentication and deploy it"}}
+{"type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"await tools.exec_command({cmd:\"apply database migration\"})","call_id":"1"}}
+{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"1","output":"done"}}
+{"type":"event_msg","payload":{"type":"user_message","message":"Show me the diff and verify the permissions"}}
+{"type":"response_item","payload":{"type":"function_call","name":"js","arguments":"{\"code\":\"await tools.exec_command({cmd:'deploy production'})\"}","call_id":"2"}}
+{"type":"event_msg","payload":{"type":"user_message","message":"Wrong, revert the deploy instead"}}
