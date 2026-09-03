@@ -12,7 +12,7 @@ quickly, delegate heavily, and often cannot tell which parts they truly understa
 
 ## Product loop
 
-1. Install in one command and complete a two-minute terminal onboarding.
+1. Run one command. Show value before asking a question.
 2. Dura Mater silently reads agent sessions and records delegation, review,
    correction, and outcomes.
 3. It coaches only when a consequential decision is being accepted blindly.
@@ -22,15 +22,16 @@ quickly, delegate heavily, and often cannot tell which parts they truly understa
 ## Installation and onboarding
 
 ```sh
-npx dura-mater install
+npx dura-mater
 ```
 
-The installer detects Codex and Claude Code, adds the required hooks, explains
-what will be read, and offers a sample session. Local use needs no account.
+The installer detects Codex and Claude Code, starts from existing sessions, and
+shows the first useful result. Local use needs no account.
 
-Onboarding creates a plain, editable `USER.md` containing strengths, must-retain
-skills, tasks to delegate, current goals, and coaching intensity. It also installs
-an editable `VOICE.md`, so coaching feels personal rather than generated.
+Only after showing value, onboarding asks one question at a time across later
+sessions. The answers fill a plain, editable `USER.md`: strengths, must-retain
+skills, tasks to delegate, current goals, and coaching intensity. An editable
+`VOICE.md` keeps coaching personal.
 
 ## Capture
 
