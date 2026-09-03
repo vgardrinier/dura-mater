@@ -6,6 +6,7 @@ import { analyzeFiles } from "./analyze.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const defaultVoice = fs.readFileSync(path.join(here, "..", "templates", "VOICE.md"), "utf8");
+const hookTemplate = path.join(here, "..", "templates", "dura-mater-hook.cjs");
 
 export function detectSources(home = os.homedir()) {
   return [
@@ -54,6 +55,50 @@ export function userMarkdown(a) {
   return `# You\n\n## Working on\n\n${a.project}\n\n## Becoming great at\n\n${a.craft}\n\n## Coaching\n\n${a.frequency}\n\n## Intervention sensitivity\n\n${a.sensitivity}\n\n## Intervention threshold\n\n${a.threshold}\n`;
 }
 
+export function profileNeedsSetup(file) {
+  if (!fs.existsSync(file)) return true;
+  const text = fs.readFileSync(file, "utf8");
+  return /## (Working on|Becoming great at)\s+Not set yet/m.test(text.replace(/\r?\n/g, " "));
+}
+
+export function installProject(projectDir) {
+  const project = path.resolve(projectDir);
+  if (!fs.existsSync(project) || !fs.statSync(project).isDirectory()) throw new Error(`project not found: ${project}`);
+  const codexDir = path.join(project, ".codex");
+  const hooksDir = path.join(codexDir, "hooks");
+  const configFile = path.join(codexDir, "hooks.json");
+  const handlerFile = path.join(hooksDir, "dura-mater-hook.cjs");
+  const config = {
+    description: "Dura Mater project coaching hook.",
+    hooks: {
+      UserPromptSubmit: [{ hooks: [{ type: "command", command: '/usr/bin/env node "$(git rev-parse --show-toplevel)/.codex/hooks/dura-mater-hook.cjs"', timeout: 3 }] }],
+      PreToolUse: [{ matcher: "Bash|apply_patch", hooks: [{ type: "command", command: '/usr/bin/env node "$(git rev-parse --show-toplevel)/.codex/hooks/dura-mater-hook.cjs"', timeout: 3 }] }],
+      SessionEnd: [{ hooks: [{ type: "command", command: '/usr/bin/env node "$(git rev-parse --show-toplevel)/.codex/hooks/dura-mater-hook.cjs"', timeout: 3 }] }],
+    },
+  };
+  const wanted = `${JSON.stringify(config, null, 2)}\n`;
+  if (fs.existsSync(configFile) && fs.readFileSync(configFile, "utf8") !== wanted) {
+    throw new Error(`${configFile} already exists; left it unchanged`);
+  }
+  if (fs.existsSync(handlerFile) && fs.readFileSync(handlerFile, "utf8") !== fs.readFileSync(hookTemplate, "utf8")) {
+    throw new Error(`${handlerFile} already exists; left it unchanged`);
+  }
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(configFile, wanted);
+  fs.copyFileSync(hookTemplate, handlerFile);
+  fs.chmodSync(handlerFile, 0o755);
+  return { project, configFile, handlerFile };
+}
+
+export function uninstallProject(projectDir) {
+  const project = path.resolve(projectDir);
+  const configFile = path.join(project, ".codex", "hooks.json");
+  const handlerFile = path.join(project, ".codex", "hooks", "dura-mater-hook.cjs");
+  if (fs.existsSync(configFile) && JSON.parse(fs.readFileSync(configFile, "utf8")).description === "Dura Mater project coaching hook.") fs.unlinkSync(configFile);
+  if (fs.existsSync(handlerFile)) fs.unlinkSync(handlerFile);
+  return { project };
+}
+
 export async function install({ home = os.homedir(), configDir } = {}) {
   const target = configDir || path.join(home, ".dura-mater");
   const sources = detectSources(home);
@@ -64,5 +109,5 @@ export async function install({ home = os.homedir(), configDir } = {}) {
   if (isFirstRun) fs.writeFileSync(userFile, userMarkdown({ project: "Not set yet", craft: "Not set yet", frequency: "only when it really matters", sensitivity: "critical", threshold: "0.90" }), { mode: 0o600 });
   if (!fs.existsSync(voiceFile)) fs.writeFileSync(voiceFile, defaultVoice, { mode: 0o600 });
   fs.writeFileSync(path.join(target, "sources.json"), `${JSON.stringify(sources, null, 2)}\n`, { mode: 0o600 });
-  return { target, userFile, isFirstRun, sources, result: firstResult(sources) };
+  return { target, userFile, isFirstRun, needsSetup: profileNeedsSetup(userFile), sources, result: firstResult(sources) };
 }
