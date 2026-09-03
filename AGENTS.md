@@ -10,4 +10,6 @@ Keep answers brief. Lead with the core insight. Prefer one strong argument over 
 
 Read `README.md` and `PRD.md` before making product or engineering decisions. Record durable product decisions in Markdown so people and agents share the same context.
 
+Read `VOICE.md` before writing any product copy or coaching intervention.
+
 Use a separate Git branch or worktree for substantial changes. Keep commits focused and make the diff easy to review.
