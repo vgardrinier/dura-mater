@@ -4,20 +4,28 @@ import readline from "node:readline/promises";
 
 const paint = (code, text, color) => color ? `\u001b[${code}m${text}\u001b[0m` : text;
 
-export function formatResult(result, color = false) {
+function metricBlock(result, color = false) {
   if (!result.sessions) return "No sessions this week. Dura Mater is active.";
   const line = (label, value) => `${paint("2", label.padEnd(30), color)} ${paint("1", String(value), color)}`;
   return [
-    paint("1;36", "DURA MATER · LAST 7 DAYS", color),
-    "",
     line("Agent actions", result.actions),
     line("Important decisions", result.important),
     line("Reviewed", result.reviewed),
     line("Corrected by you", result.corrected),
     line("Accepted without review", result.unreviewed),
     "",
-    paint("2", `Data confidence: ${result.confidence}. These are behavioral signals, not a cognitive score.`, color),
+    paint("2", `Coverage: ${result.coverage}% of readable events · confidence: ${result.confidence}`, color),
   ].join("\n");
+}
+
+export function formatResult(result, color = false) {
+  const sections = [paint("1;36", "DURA MATER · LAST 7 DAYS", color)];
+  for (const source of result.bySource) {
+    sections.push(`${paint("1", source.agent, color)}\n${metricBlock(source, color)}`);
+  }
+  if (result.bySource.length > 1) sections.push(`${paint("1", "Combined (sum of distinct session files)", color)}\n${metricBlock(result.total, color)}`);
+  sections.push(paint("2", "Important decisions are topic signals, not a cognitive score.", color));
+  return sections.join("\n\n");
 }
 
 const modes = {
