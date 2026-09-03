@@ -29,8 +29,8 @@ The installer detects Codex and Claude Code, adds the required hooks, explains
 what will be read, and offers a sample session. Local use needs no account.
 
 Onboarding creates a plain, editable `USER.md` containing strengths, must-retain
-skills, tasks to delegate, current goals, and coaching intensity: low, normal, or
-high.
+skills, tasks to delegate, current goals, and coaching intensity. It also installs
+an editable `VOICE.md`, so coaching feels personal rather than generated.
 
 ## Capture
 
@@ -40,8 +40,8 @@ Missing events lower confidence; they are never invented.
 
 ## Coaching
 
-The voice is direct and demanding, like INSANITY coaching: short, specific, and
-focused on action—not lectures or quizzes.
+The voice is a demanding human coach on the user's side: natural, personal, and
+focused on the mental rep—not lectures, quizzes, or generic warnings.
 
 Intervene only when all are true:
 
@@ -50,7 +50,8 @@ Intervene only when all are true:
 - the user shows weak evidence of review;
 - the point has not already been raised in this session.
 
-> Stop. This changes who can access user data. Explain the rule before you ship.
+> Hold up. This is the part your brain needs. Who should get access—and who
+> shouldn't? Say it before you ship.
 
 Never interrupt routine delegated work. Respect coaching intensity and support
 `mute`, `later`, and `never for this task`.
@@ -79,9 +80,10 @@ Weekly email is opt-in. Secrets are redacted before storage.
 
 ## MVP scope
 
-Build the installer, `USER.md` onboarding, Codex and Claude Code adapters, local
-event store, intervention engine, `/score`, and weekly recap. Exclude browser
-capture, IDE plugins, teams, leaderboards, spaced repetition, and scientific claims.
+Build the installer, `USER.md` onboarding, editable `VOICE.md`, Codex and Claude
+Code adapters, local event store, intervention engine, `/score`, and weekly recap.
+Exclude browser capture, IDE plugins, teams, leaderboards, spaced repetition, and
+scientific claims.
 
 ## Success after four weeks
 
