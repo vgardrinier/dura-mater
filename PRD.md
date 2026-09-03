@@ -34,11 +34,18 @@ should step in. The last answer maps to a stored intervention sensitivity and
 threshold. Answers live plainly in editable `USER.md`. Non-interactive installs
 skip the questions safely. An editable `VOICE.md` keeps coaching personal.
 
+The working profile has three explicit layers: **You told me**, **I've seen**, and
+**Still learning**. User statements are authoritative. Observations cite evidence
+and confidence. Unconfirmed hypotheses never cause a strong intervention.
+
 ## Capture
 
 Capture prompts, responses, tool calls, commands, file changes, approvals, user
 corrections, and outcomes through native hooks. Store normalized events locally.
 Missing events lower confidence; they are never invented.
+Profile learning uses at most the latest 200 meaningful decisions, never raw action
+volume. Generated content is written atomically to `LEARNED.md` and
+`decisions.json`; it never overwrites user edits in `USER.md`.
 
 ## Coaching
 
