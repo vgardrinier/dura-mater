@@ -12,7 +12,7 @@ quickly, delegate heavily, and often cannot tell which parts they truly understa
 
 ## Product loop
 
-1. Run one command. Show value before asking a question.
+1. Run one command, show available session evidence, and activate in under a minute.
 2. Dura Mater silently reads agent sessions and records delegation, review,
    correction, and outcomes.
 3. It coaches only when a consequential decision is being accepted blindly.
@@ -28,10 +28,11 @@ npx dura-mater
 The installer detects Codex and Claude Code, starts from existing sessions, and
 shows the first useful result. Local use needs no account.
 
-Only after showing value, onboarding asks one question at a time across later
-sessions. The answers fill a plain, editable `USER.md`: strengths, must-retain
-skills, tasks to delegate, current goals, and coaching intensity. An editable
-`VOICE.md` keeps coaching personal.
+On the first interactive run, onboarding asks exactly three short questions: what
+the user is working on, what they want to become great at, and how often coaching
+should step in. The last answer maps to a stored intervention sensitivity and
+threshold. Answers live plainly in editable `USER.md`. Non-interactive installs
+skip the questions safely. An editable `VOICE.md` keeps coaching personal.
 
 ## Capture
 
