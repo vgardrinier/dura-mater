@@ -12,6 +12,25 @@ function profileTokens(text) {
   return [...new Set((text.toLowerCase().match(/[a-z][a-z-]{3,}/g) || []).filter((word) => !["working", "becoming", "great", "coaching", "intervention", "threshold", "sensitivity", "only", "when", "really", "matters", "normal"].includes(word)))];
 }
 
+function statedField(profile, heading) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return profile.match(new RegExp(`^###? ${escaped}\\s*\\n+\\s*([^\\n]+)`, "mi"))?.[1]?.trim() || "";
+}
+
+function promptCategory(prompt) {
+  if (/\b(auth(?:entication|orization)?|security|permissions?|access)\b/i.test(prompt)) return "access";
+  if (/\b(database|migration|schema|data model)\b/i.test(prompt)) return "data";
+  if (/\b(architecture|interface|system design)\b/i.test(prompt)) return "architecture";
+  return "decision";
+}
+
+function challenge(craft, category) {
+  if (category === "access") return "Wait. Who should have access here?";
+  if (category === "data") return "Hold on. What's the data rule here?";
+  const shortCraft = craft.replace(/[.?!]+$/, "").slice(0, 45);
+  return `You said ${shortCraft}. What's your call here?`;
+}
+
 function statePath(event) {
   const key = crypto.createHash("sha256").update(`${event.cwd || ""}:${event.session_id || "unknown"}`).digest("hex").slice(0, 20);
   return path.join(os.tmpdir(), `dura-mater-${key}.json`);
@@ -29,16 +48,20 @@ function main(event, home = process.env.DURA_MATER_HOME || path.join(os.homedir(
     let profile = "";
     try { profile = fs.readFileSync(path.join(home, "USER.md"), "utf8"); } catch { return null; }
     const prompt = event.prompt || "";
-    const intersects = profileTokens(profile).some((token) => prompt.toLowerCase().includes(token))
-      || (IMPORTANT.test(profile) && IMPORTANT.test(prompt));
+    const craft = statedField(profile, "Becoming great at");
+    const project = statedField(profile, "Working on");
+    const stated = `${craft} ${project}`;
+    const intersects = profileTokens(stated).some((token) => prompt.toLowerCase().includes(token))
+      || (IMPORTANT.test(stated) && IMPORTANT.test(prompt));
     state.pending = DELEGATION.test(prompt) && intersects && !THOUGHT.test(prompt);
+    state.challenge = challenge(craft || "this", promptCategory(prompt));
     fs.writeFileSync(file, JSON.stringify(state), { mode: 0o600 });
     return null;
   }
   if (event.hook_event_name === "PreToolUse" && state.pending && !state.intervened) {
     state.intervened = true;
     fs.writeFileSync(file, JSON.stringify(state), { mode: 0o600 });
-    return { systemMessage: "Hang on. What's your call here before the agent makes it?" };
+    return { systemMessage: state.challenge };
   }
   return null;
 }
