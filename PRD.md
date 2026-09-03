@@ -2,51 +2,92 @@
 
 ## Promise
 
-Use AI at full speed without losing the judgment to steer it.
+Get the full leverage of coding agents without losing the skills and judgment to
+steer them.
 
-## User
+## First user
 
-A frequent Codex user who delegates meaningful work and wants to stay capable of
-reviewing it.
+Terminal-based Codex and Claude Code users. Start with vibe coders: they ship
+quickly, delegate heavily, and often cannot tell which parts they truly understand.
 
-## Loop
+## Product loop
 
-1. Read local Codex session logs. Nothing leaves the machine.
-2. Estimate leverage and evidence of judgment from observable behavior.
-3. `/score` gives one number, its drivers, and one useful next action.
-4. A proactive check speaks only after consequential work with weak review.
-5. `weekly` creates an email-ready recap.
+1. Install in one command and complete a two-minute terminal onboarding.
+2. Dura Mater silently reads agent sessions and records delegation, review,
+   correction, and outcomes.
+3. It coaches only when a consequential decision is being accepted blindly.
+4. `/score` shows clear raw measures and one useful action.
+5. A weekly recap shows how the user's working habits changed.
 
-## Signals in V1
-
-- Leverage: agent tool calls and completed sessions.
-- Consequence: shell commands, file changes, approvals, and risk words.
-- Judgment: user follow-ups that question, verify, correct, or redirect the agent.
-- Blind acceptance: consequential sessions with no later evidence of review.
-
-The score is directional, not a measure of intelligence. It must always explain
-why it changed.
-
-## Commands
+## Installation and onboarding
 
 ```sh
-python3 -m dura_mater /score
-python3 -m dura_mater check
-python3 -m dura_mater weekly
+npx dura-mater install
 ```
 
-## Intervention rule
+The installer detects Codex and Claude Code, adds the required hooks, explains
+what will be read, and offers a sample session. Local use needs no account.
 
-Speak only when a session is consequential, has at least two agent actions, and
-has no evidence of user review. Never emit more than one prompt per session.
+Onboarding creates a plain, editable `USER.md` containing strengths, must-retain
+skills, tasks to delegate, current goals, and coaching intensity: low, normal, or
+high.
 
-## Success after two weeks
+## Capture
 
-- At least 40% of active users request `/score` three times in week two.
-- At least 30% act on a suggested review.
-- Fewer than 10% mute proactive checks.
+Capture prompts, responses, tool calls, commands, file changes, approvals, user
+corrections, and outcomes through native hooks. Store normalized events locally.
+Missing events lower confidence; they are never invented.
 
-## Not in V1
+## Coaching
 
-Universal capture, quizzes, skill graphs, leaderboards, or a scientifically
-validated cognitive score. Add another agent only after this loop earns repeat use.
+The voice is direct and demanding, like INSANITY coaching: short, specific, and
+focused on action—not lectures or quizzes.
+
+Intervene only when all are true:
+
+- the work touches a must-retain skill or a high-impact decision;
+- the agent has taken meaningful action;
+- the user shows weak evidence of review;
+- the point has not already been raised in this session.
+
+> Stop. This changes who can access user data. Explain the rule before you ship.
+
+Never interrupt routine delegated work. Respect coaching intensity and support
+`mute`, `later`, and `never for this task`.
+
+## Measures
+
+Show raw measures before any composite score:
+
+- agent actions accepted;
+- consequential decisions reviewed;
+- corrections made by the user;
+- must-retain skills practiced versus delegated;
+- risky actions approved without inspection;
+- review depth: files opened, tests run, explanations requested;
+- intervention follow-through.
+
+`/score` reports the last 7 and 30 days, data confidence, and one next action. The
+weekly recap highlights trends, a win, a risk, and one training focus. A single
+“cognitive fitness” score waits until raw measures predict useful outcomes.
+
+## Privacy
+
+Local-first by default. No code, prompts, or session content leaves the machine
+without explicit opt-in. Users can inspect, export, and delete all stored data.
+Weekly email is opt-in. Secrets are redacted before storage.
+
+## MVP scope
+
+Build the installer, `USER.md` onboarding, Codex and Claude Code adapters, local
+event store, intervention engine, `/score`, and weekly recap. Exclude browser
+capture, IDE plugins, teams, leaderboards, spaced repetition, and scientific claims.
+
+## Success after four weeks
+
+- 70% complete setup without help.
+- 40% of activated users return in week two.
+- 30% use `/score` at least twice in week two.
+- 25% act on at least one intervention each week.
+- Under 10% mute coaching entirely.
+- Users can name one decision they caught or understood because of Dura Mater.
