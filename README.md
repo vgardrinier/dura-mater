@@ -28,6 +28,18 @@ questions safely. `npx dura-mater install` will work too.
 Running the command again refreshes the sources without overwriting `USER.md` or
 `VOICE.md`.
 
+`USER.md` contains what you said. Machine-made observations and open hypotheses
+live separately in `LEARNED.md`, with evidence and confidence. Dura Mater reads at
+most the latest 200 meaningful decisions. Unconfirmed ideas cannot trigger a
+strong intervention.
+
+Inspect or remove learned topics:
+
+```sh
+node ./bin/dura-mater.js profile
+node ./bin/dura-mater.js forget data
+```
+
 If setup was interrupted, run the same command again. Dura Mater notices the
 unfinished `USER.md` and resumes. To answer setup again without deleting data:
 
@@ -49,8 +61,9 @@ Review and trust the project hook when Codex asks. Then try:
 
 > Implement the authentication flow for me.
 
-On the first matching tool handoff, Dura Mater should say: “Hang on. What's your
-call here before the agent makes it?” It stays quiet for the rest of that session.
+If `USER.md` says security is part of the craft, the first matching tool handoff
+should say: “Wait. Who should have access here?” It stays quiet for the rest of
+that session.
 
 Remove only the files Dura Mater installed:
 
