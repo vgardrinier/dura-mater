@@ -3,8 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { detectSources, install } from "../src/install.js";
+import { detectSources, firstResult, install } from "../src/install.js";
 import { analyzeFiles } from "../src/analyze.js";
 import { formatResult, onboard, run } from "../src/cli.js";
 
@@ -33,8 +34,8 @@ test("install writes local files, reports evidence, and is idempotent", async ()
   assert.match(fs.readFileSync(path.join(target, "USER.md"), "utf8"), /Intervention threshold/);
   assert.match(fs.readFileSync(path.join(target, "VOICE.md"), "utf8"), /sharp, warm, and direct/i);
   assert.equal(JSON.parse(fs.readFileSync(path.join(target, "sources.json"), "utf8"))[0].available, true);
-  assert.equal(state.result.important, 1);
-  assert.equal(state.result.reviewed, 1);
+  assert.equal(state.result.total.important, 2);
+  assert.equal(state.result.total.reviewed, 1);
   fs.writeFileSync(path.join(target, "USER.md"), "my profile");
   await install({ home, configDir: target });
   assert.equal(fs.readFileSync(path.join(target, "USER.md"), "utf8"), "my profile");
@@ -54,13 +55,37 @@ test("metrics distinguish correction from blind acceptance", () => {
     { type: "response_item", payload: { type: "function_call", name: "apply_patch", arguments: "database schema" } },
   ].map(JSON.stringify).join("\n"));
   const result = analyzeFiles([reviewed, blind]);
-  assert.equal(result.important, 2);
+  assert.equal(result.important, 3);
+  assert.equal(result.corrected, 1);
+  assert.equal(result.unreviewed, 2);
+});
+
+test("parses Codex custom tool calls and counts decision topics once", () => {
+  const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "codex-session.jsonl");
+  const result = analyzeFiles([fixture]);
+  assert.equal(result.actions, 2);
+  assert.equal(result.important, 3);
+  assert.equal(result.reviewed, 2);
   assert.equal(result.corrected, 1);
   assert.equal(result.unreviewed, 1);
+  assert.equal(result.coverage, 100);
+});
+
+test("combined totals do not count the same session file twice", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dura-dedupe-"));
+  fs.writeFileSync(path.join(root, "one.jsonl"), JSON.stringify({ type: "response_item", payload: { type: "custom_tool_call", name: "exec", input: "deploy production" } }));
+  const result = firstResult([
+    { agent: "Codex", sessions: root, available: true },
+    { agent: "Claude Code", sessions: root, available: true },
+  ]);
+  assert.equal(result.bySource[0].actions, 1);
+  assert.equal(result.bySource[1].actions, 0);
+  assert.equal(result.total.actions, 1);
 });
 
 test("plain output explains raw metrics without a score", () => {
-  const text = formatResult({ sessions: 2, actions: 8, important: 3, reviewed: 1, corrected: 1, unreviewed: 2, confidence: "directional" });
+  const source = { agent: "Codex", sessions: 2, actions: 8, important: 3, reviewed: 1, corrected: 1, unreviewed: 2, confidence: "directional", coverage: 100 };
+  const text = formatResult({ bySource: [source], total: source });
   assert.match(text, /Important decisions\s+3/);
   assert.match(text, /Accepted without review\s+2/);
   assert.match(text, /not a cognitive score/);
