@@ -31,8 +31,23 @@ function listJsonl(root, limit = 10000) {
 }
 
 export function firstResult(sources, now = Date.now()) {
-  const files = sources.filter((source) => source.available).flatMap((source) => listJsonl(source.sessions));
-  return analyzeFiles(files, now);
+  const seen = new Set();
+  const bySource = sources.filter((source) => source.available).map((source) => {
+    const files = listJsonl(source.sessions).filter((file) => {
+      let key;
+      try { key = fs.realpathSync(file); } catch { key = path.resolve(file); }
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return { agent: source.agent, ...analyzeFiles(files, now) };
+  });
+  const fields = ["sessions", "actions", "important", "reviewed", "corrected", "unreviewed", "parsed", "malformed"];
+  const total = Object.fromEntries(fields.map((field) => [field, bySource.reduce((sum, source) => sum + source[field], 0)]));
+  const known = total.parsed + total.malformed;
+  total.coverage = known ? Math.round(100 * total.parsed / known) : 0;
+  total.confidence = known && total.coverage >= 90 ? "directional" : "low";
+  return { bySource, total };
 }
 
 export function userMarkdown(a) {
