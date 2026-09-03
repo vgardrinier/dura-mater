@@ -1,6 +1,8 @@
 import { install, installProject, uninstallProject, userMarkdown } from "./install.js";
 import fs from "node:fs";
 import readline from "node:readline/promises";
+import path from "node:path";
+import { forgetObservation } from "./profile.js";
 
 const paint = (code, text, color) => color ? `\u001b[${code}m${text}\u001b[0m` : text;
 
@@ -55,7 +57,7 @@ function firstName(profile) {
 
 export async function run(args, options = {}) {
   const command = args[0] && !args[0].startsWith("--") ? args[0] : "install";
-  if (!["install", "setup", "uninstall"].includes(command)) throw new Error("run `npx dura-mater`, `setup`, or `uninstall`");
+  if (!["install", "setup", "uninstall", "profile", "forget"].includes(command)) throw new Error("run `npx dura-mater`, `setup`, `profile`, `forget`, or `uninstall`");
   const projectFlag = args.indexOf("--project");
   const project = projectFlag >= 0 ? args[projectFlag + 1] : null;
   if (projectFlag >= 0 && !project) throw new Error("--project needs a path");
@@ -67,7 +69,19 @@ export async function run(args, options = {}) {
   }
   const output = options.output || process.stdout;
   const input = options.input || process.stdin;
-  const state = await install(options);
+  let state = await install(options);
+  if (command === "profile") {
+    output.write(fs.readFileSync(path.join(state.target, "LEARNED.md"), "utf8"));
+    return state;
+  }
+  if (command === "forget") {
+    const category = args[1];
+    if (!category) throw new Error("forget needs a topic, for example `forget data`");
+    forgetObservation(state.target, category.toLowerCase());
+    state = await install(options);
+    output.write(`Forgot the ${category} observation. USER.md was not changed.\n`);
+    return state;
+  }
   const projectState = project ? installProject(project) : null;
   const found = state.sources.filter((s) => s.available).map((s) => s.agent);
   const color = Boolean(output.isTTY && !process.env.NO_COLOR);
