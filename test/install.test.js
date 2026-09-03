@@ -3,9 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { detectSources, firstResult, install } from "../src/install.js";
+import { detectSources, firstResult, install, installProject, profileNeedsSetup, uninstallProject } from "../src/install.js";
 import { analyzeFiles } from "../src/analyze.js";
 import { formatResult, onboard, run } from "../src/cli.js";
 
@@ -32,7 +33,7 @@ test("install writes local files, reports evidence, and is idempotent", async ()
   const target = path.join(home, ".dura-mater");
   const state = await install({ home, configDir: target });
   assert.match(fs.readFileSync(path.join(target, "USER.md"), "utf8"), /Intervention threshold/);
-  assert.match(fs.readFileSync(path.join(target, "VOICE.md"), "utf8"), /sharp, warm, and direct/i);
+  assert.match(fs.readFileSync(path.join(target, "VOICE.md"), "utf8"), /live conversation/i);
   assert.equal(JSON.parse(fs.readFileSync(path.join(target, "sources.json"), "utf8"))[0].available, true);
   assert.equal(state.result.total.important, 2);
   assert.equal(state.result.total.reviewed, 1);
@@ -111,6 +112,46 @@ test("first-run onboarding asks three questions and maps intense mode", async ()
   assert.match(profile, /0\.40/);
   assert.equal((shown.match(/\?/g) || []).length, 3);
   assert.match(shown, /Tell me what you're building and what you care about getting good at\./);
+});
+
+test("aborted placeholder profile resumes and completed setup stays idempotent", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "dura-resume-"));
+  const target = path.join(home, ".dura-mater");
+  const first = await install({ home, configDir: target });
+  assert.equal(first.needsSetup, true);
+  assert.equal(profileNeedsSetup(first.userFile), true);
+  const input = new PassThrough(); input.isTTY = true;
+  const output = new Writable({ write(_chunk, _encoding, done) { done(); } }); output.isTTY = true;
+  setTimeout(() => input.write("A product\n"), 5);
+  setTimeout(() => input.write("Architecture\n"), 10);
+  setTimeout(() => input.end("1\n"), 15);
+  await onboard(first, input, output);
+  const second = await install({ home, configDir: target });
+  assert.equal(second.needsSetup, false);
+  assert.match(fs.readFileSync(first.userFile, "utf8"), /A product/);
+});
+
+test("project hook installs reversibly and intervenes once", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-project-"));
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-profile-"));
+  fs.writeFileSync(path.join(profile, "USER.md"), "## Becoming great at\n\nSecurity architecture\n");
+  const installed = installProject(project);
+  const config = JSON.parse(fs.readFileSync(installed.configFile, "utf8"));
+  assert.ok(config.hooks.UserPromptSubmit);
+  assert.ok(config.hooks.PreToolUse);
+  const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+  const fixture = (name) => JSON.parse(fs.readFileSync(path.join(fixtureDir, name), "utf8"));
+  const call = (event) => spawnSync(process.execPath, [installed.handlerFile], {
+    input: JSON.stringify({ ...event, cwd: project, session_id: "one" }),
+    encoding: "utf8",
+    env: { ...process.env, DURA_MATER_HOME: profile },
+  }).stdout;
+  assert.equal(call(fixture("hook-user-prompt.json")), "");
+  assert.match(call(fixture("hook-pre-tool.json")), /Hang on/);
+  assert.equal(call(fixture("hook-pre-tool.json")), "");
+  uninstallProject(project);
+  assert.equal(fs.existsSync(installed.configFile), false);
+  assert.equal(fs.existsSync(installed.handlerFile), false);
 });
 
 test("non-TTY first run skips questions and ends with spoken activation", async () => {
