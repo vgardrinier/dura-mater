@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { analyzeFiles } from "./analyze.js";
+import { updateLearnedProfile } from "./profile.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const defaultVoice = fs.readFileSync(path.join(here, "..", "templates", "VOICE.md"), "utf8");
@@ -15,7 +16,7 @@ export function detectSources(home = os.homedir()) {
   ].map((item) => ({ ...item, available: fs.existsSync(item.sessions), settingsFound: fs.existsSync(item.settings) }));
 }
 
-function listJsonl(root, limit = 10000) {
+export function listJsonl(root, limit = 10000) {
   if (!fs.existsSync(root)) return [];
   const found = [], pending = [root];
   while (pending.length && found.length < limit) {
@@ -52,13 +53,13 @@ export function firstResult(sources, now = Date.now()) {
 }
 
 export function userMarkdown(a) {
-  return `# You\n\n## Working on\n\n${a.project}\n\n## Becoming great at\n\n${a.craft}\n\n## Coaching\n\n${a.frequency}\n\n## Intervention sensitivity\n\n${a.sensitivity}\n\n## Intervention threshold\n\n${a.threshold}\n`;
+  return `# You\n\n## You told me\n\n### Working on\n\n${a.project}\n\n### Becoming great at\n\n${a.craft}\n\n### Coaching\n\n${a.frequency}\n\n### Intervention sensitivity\n\n${a.sensitivity}\n\n### Intervention threshold\n\n${a.threshold}\n\n## I've seen\n\nMachine observations live in LEARNED.md. They never overwrite this file.\n\n## Still learning\n\nUnconfirmed ideas live in LEARNED.md and cannot trigger strong interventions.\n`;
 }
 
 export function profileNeedsSetup(file) {
   if (!fs.existsSync(file)) return true;
   const text = fs.readFileSync(file, "utf8");
-  return /## (Working on|Becoming great at)\s+Not set yet/m.test(text.replace(/\r?\n/g, " "));
+  return /#{2,3} (Working on|Becoming great at)\s+Not set yet/m.test(text.replace(/\r?\n/g, " "));
 }
 
 export function installProject(projectDir) {
@@ -109,5 +110,7 @@ export async function install({ home = os.homedir(), configDir } = {}) {
   if (isFirstRun) fs.writeFileSync(userFile, userMarkdown({ project: "Not set yet", craft: "Not set yet", frequency: "only when it really matters", sensitivity: "critical", threshold: "0.90" }), { mode: 0o600 });
   if (!fs.existsSync(voiceFile)) fs.writeFileSync(voiceFile, defaultVoice, { mode: 0o600 });
   fs.writeFileSync(path.join(target, "sources.json"), `${JSON.stringify(sources, null, 2)}\n`, { mode: 0o600 });
-  return { target, userFile, isFirstRun, needsSetup: profileNeedsSetup(userFile), sources, result: firstResult(sources) };
+  const files = sources.filter((source) => source.available).flatMap((source) => listJsonl(source.sessions));
+  const learned = updateLearnedProfile(target, files);
+  return { target, userFile, isFirstRun, needsSetup: profileNeedsSetup(userFile), sources, result: firstResult(sources), learned };
 }
