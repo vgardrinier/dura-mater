@@ -9,6 +9,7 @@ import test from "node:test";
 import { detectSources, firstResult, install, installProject, profileNeedsSetup, uninstallProject } from "../src/install.js";
 import { analyzeFiles } from "../src/analyze.js";
 import { formatResult, onboard, run } from "../src/cli.js";
+import { extractDecisions, forgetObservation, updateLearnedProfile } from "../src/profile.js";
 
 test("detects agents without changing their settings", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "dura-detect-"));
@@ -147,11 +148,49 @@ test("project hook installs reversibly and intervenes once", () => {
     env: { ...process.env, DURA_MATER_HOME: profile },
   }).stdout;
   assert.equal(call(fixture("hook-user-prompt.json")), "");
-  assert.match(call(fixture("hook-pre-tool.json")), /Hang on/);
+  assert.match(call(fixture("hook-pre-tool.json")), /Who should have access/);
   assert.equal(call(fixture("hook-pre-tool.json")), "");
   uninstallProject(project);
   assert.equal(fs.existsSync(installed.configFile), false);
   assert.equal(fs.existsSync(installed.handlerFile), false);
+});
+
+test("learned profile uses at most 200 decisions and preserves USER.md", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dura-bound-"));
+  const config = path.join(root, "config");
+  fs.mkdirSync(config);
+  const user = "# My edits stay\n";
+  fs.writeFileSync(path.join(config, "USER.md"), user);
+  const files = [];
+  for (let index = 0; index < 205; index += 1) {
+    const file = path.join(root, `${index}.jsonl`);
+    fs.writeFileSync(file, JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: `Change database schema ${index}` } }));
+    files.push(file);
+  }
+  assert.equal(extractDecisions(files).length, 200);
+  const learned = updateLearnedProfile(config, files);
+  assert.equal(learned.decisions.length, 200);
+  assert.equal(fs.readFileSync(path.join(config, "USER.md"), "utf8"), user);
+  assert.match(learned.text, /## You told me[\s\S]*## I've seen[\s\S]*## Still learning/);
+  forgetObservation(config, "data");
+  assert.doesNotMatch(updateLearnedProfile(config, files).text, /\*\*data\*\*/);
+});
+
+test("observations alone cannot trigger, but stated craft personalizes challenge", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-weight-"));
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-weight-profile-"));
+  fs.writeFileSync(path.join(profile, "USER.md"), "## You told me\n\n### Becoming great at\n\nVisual design\n");
+  fs.writeFileSync(path.join(profile, "LEARNED.md"), "## I've seen\n\nSecurity architecture\n");
+  const installed = installProject(project);
+  const invoke = (id, event) => spawnSync(process.execPath, [installed.handlerFile], {
+    input: JSON.stringify({ cwd: project, session_id: id, ...event }), encoding: "utf8",
+    env: { ...process.env, DURA_MATER_HOME: profile },
+  }).stdout;
+  invoke("observed", { hook_event_name: "UserPromptSubmit", prompt: "Implement authentication" });
+  assert.equal(invoke("observed", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), "");
+  fs.writeFileSync(path.join(profile, "USER.md"), "## You told me\n\n### Becoming great at\n\nSystems architecture\n");
+  invoke("stated", { hook_event_name: "UserPromptSubmit", prompt: "Design the systems architecture" });
+  assert.match(invoke("stated", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), /You said Systems architecture/);
 });
 
 test("non-TTY first run skips questions and ends with spoken activation", async () => {
