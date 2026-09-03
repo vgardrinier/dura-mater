@@ -1,4 +1,4 @@
-import { install, userMarkdown } from "./install.js";
+import { install, installProject, uninstallProject, userMarkdown } from "./install.js";
 import fs from "node:fs";
 import readline from "node:readline/promises";
 
@@ -34,8 +34,8 @@ const modes = {
   "3": { frequency: "coach me hard", sensitivity: "intense", threshold: "0.40" },
 };
 
-export async function onboard(state, input, output) {
-  if (!state.isFirstRun || !input.isTTY || !output.isTTY) return null;
+export async function onboard(state, input, output, force = false) {
+  if ((!state.needsSetup && !force) || !input.isTTY || !output.isTTY) return null;
   output.write("\nTell me what you're building and what you care about getting good at. Then I'll know when to leave you alone and when to push.\n\n");
   const rl = readline.createInterface({ input, output });
   try {
@@ -54,15 +54,27 @@ function firstName(profile) {
 }
 
 export async function run(args, options = {}) {
-  if (args[0] && args[0] !== "install") throw new Error("run `npx dura-mater`");
+  const command = args[0] && !args[0].startsWith("--") ? args[0] : "install";
+  if (!["install", "setup", "uninstall"].includes(command)) throw new Error("run `npx dura-mater`, `setup`, or `uninstall`");
+  const projectFlag = args.indexOf("--project");
+  const project = projectFlag >= 0 ? args[projectFlag + 1] : null;
+  if (projectFlag >= 0 && !project) throw new Error("--project needs a path");
+  if (command === "uninstall") {
+    if (!project) throw new Error("uninstall needs --project PATH");
+    const removed = uninstallProject(project);
+    (options.output || process.stdout).write(`Removed Dura Mater hooks from ${removed.project}.\n`);
+    return removed;
+  }
   const output = options.output || process.stdout;
   const input = options.input || process.stdin;
   const state = await install(options);
+  const projectState = project ? installProject(project) : null;
   const found = state.sources.filter((s) => s.available).map((s) => s.agent);
   const color = Boolean(output.isTTY && !process.env.NO_COLOR);
   output.write(`\n${found.length ? `Found ${found.join(" and ")}.` : "No Codex or Claude Code sessions found."}\n\n`);
   output.write(`${formatResult(state.result, color)}\n`);
-  const profile = await onboard(state, input, output);
+  if (projectState) output.write(`\nCodex hook installed in ${projectState.project}.\n`);
+  const profile = await onboard(state, input, output, command === "setup");
   const name = firstName(fs.readFileSync(state.userFile, "utf8"));
   const closing = profile?.sensitivity === "intense"
     ? "Good. Let's work. No hiding behind the agent."
