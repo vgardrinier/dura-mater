@@ -27,8 +27,8 @@ function promptCategory(prompt) {
 function challenge(craft, category) {
   if (category === "access") return "Wait. Who should have access here?";
   if (category === "data") return "Hold on. What's the data rule here?";
-  const shortCraft = craft.replace(/[.?!]+$/, "").slice(0, 45);
-  return `You said ${shortCraft}. What's your call here?`;
+  if (category === "architecture") return "Okay, your call. How would you design this?";
+  return "Wait. What would you do here?";
 }
 
 function statePath(event) {
