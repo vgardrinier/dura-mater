@@ -26,11 +26,14 @@ available only through:
 node ./bin/dura-mater.js details
 ```
 
-Create a compact terminal card containing only that personal fact with:
+Create a compact terminal card with:
 
 ```sh
 node ./bin/dura-mater.js share
 ```
+
+After a recall, the card shows that result and its topic. Before the first
+recall, it falls back to the weekly personal fact.
 
 Open up to five recent sessions behind an insight:
 
@@ -78,8 +81,18 @@ Review and trust the project hook when Codex asks. Then try:
 > Implement the authentication flow for me.
 
 If `USER.md` says security is part of the craft, the first matching tool handoff
-should say: “Wait. Who should have access here?” It stays quiet for the rest of
-that session.
+asks for your rule. Reply in your next Codex message. Dura Mater stores that call
+locally, along with a short redacted note of the tool handoff.
+
+Test the judgment later:
+
+```sh
+node ./bin/dura-mater.js recall
+```
+
+The hook cannot open a form or stop Codex to collect a reply. It can only ask and
+observe the next user prompt. If you answer `continue`, nothing is saved. Recall
+uses a conservative word match; uncertain answers are shown as different.
 
 Remove only the files Dura Mater installed:
 
