@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { analyzeFiles } from "./analyze.js";
 import { updateLearnedProfile } from "./profile.js";
 
@@ -44,12 +45,35 @@ export function firstResult(sources, now = Date.now()) {
     });
     return { agent: source.agent, ...analyzeFiles(files, now) };
   });
+  const previousSeen = new Set();
+  const previousBySource = sources.filter((source) => source.available).map((source) => ({
+    agent: source.agent,
+    ...analyzeFiles(listJsonl(source.sessions).filter((file) => {
+      let key;
+      try { key = fs.realpathSync(file); } catch { key = path.resolve(file); }
+      if (previousSeen.has(key)) return false;
+      previousSeen.add(key);
+      return true;
+    }), now - 7 * 86400000),
+  }));
   const fields = ["sessions", "actions", "important", "reviewed", "corrected", "unreviewed", "parsed", "malformed"];
   const total = Object.fromEntries(fields.map((field) => [field, bySource.reduce((sum, source) => sum + source[field], 0)]));
   const known = total.parsed + total.malformed;
   total.coverage = known ? Math.round(100 * total.parsed / known) : 0;
   total.confidence = known && total.coverage >= 90 ? "directional" : "low";
-  return { bySource, total };
+  total.categories = {};
+  for (const source of bySource) for (const [category, values] of Object.entries(source.categories)) {
+    const bucket = total.categories[category] ||= { sessions: 0, reviewed: 0, unreviewed: 0, corrected: 0, evidence: [] };
+    for (const field of ["sessions", "reviewed", "unreviewed", "corrected"]) bucket[field] += values[field];
+    bucket.evidence.push(...(values.evidence || []));
+    bucket.evidence = bucket.evidence.sort((a, b) => b.observedAt.localeCompare(a.observedAt)).slice(0, 5);
+  }
+  const previous = { categories: {} };
+  for (const source of previousBySource) for (const [category, values] of Object.entries(source.categories)) {
+    const bucket = previous.categories[category] ||= { sessions: 0, reviewed: 0, unreviewed: 0, corrected: 0, evidence: [] };
+    for (const field of ["sessions", "reviewed", "unreviewed", "corrected"]) bucket[field] += values[field];
+  }
+  return { bySource, total, previous };
 }
 
 export function userMarkdown(a) {
@@ -69,6 +93,10 @@ export function installProject(projectDir) {
   const hooksDir = path.join(codexDir, "hooks");
   const configFile = path.join(codexDir, "hooks.json");
   const handlerFile = path.join(hooksDir, "dura-mater-hook.cjs");
+  let excludeFile;
+  try { excludeFile = execFileSync("git", ["rev-parse", "--git-path", "info/exclude"], { cwd: project, encoding: "utf8" }).trim(); }
+  catch { throw new Error(`${project} must be a Git repository for a clean local hook install`); }
+  if (!path.isAbsolute(excludeFile)) excludeFile = path.join(project, excludeFile);
   const config = {
     description: "Dura Mater project coaching hook.",
     hooks: {
@@ -88,15 +116,26 @@ export function installProject(projectDir) {
   fs.writeFileSync(configFile, wanted);
   fs.copyFileSync(hookTemplate, handlerFile);
   fs.chmodSync(handlerFile, 0o755);
-  return { project, configFile, handlerFile };
+  const start = "# dura-mater:start";
+  const block = `${start}\n/.codex/hooks.json\n/.codex/hooks/dura-mater-hook.cjs\n# dura-mater:end\n`;
+  const existingExclude = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, "utf8") : "";
+  if (!existingExclude.includes(start)) fs.appendFileSync(excludeFile, `${existingExclude.endsWith("\n") || !existingExclude ? "" : "\n"}${block}`);
+  return { project, configFile, handlerFile, excludeFile };
 }
 
 export function uninstallProject(projectDir) {
   const project = path.resolve(projectDir);
   const configFile = path.join(project, ".codex", "hooks.json");
   const handlerFile = path.join(project, ".codex", "hooks", "dura-mater-hook.cjs");
+  let excludeFile;
+  try { excludeFile = execFileSync("git", ["rev-parse", "--git-path", "info/exclude"], { cwd: project, encoding: "utf8" }).trim(); } catch {}
+  if (excludeFile && !path.isAbsolute(excludeFile)) excludeFile = path.join(project, excludeFile);
   if (fs.existsSync(configFile) && JSON.parse(fs.readFileSync(configFile, "utf8")).description === "Dura Mater project coaching hook.") fs.unlinkSync(configFile);
   if (fs.existsSync(handlerFile)) fs.unlinkSync(handlerFile);
+  if (excludeFile && fs.existsSync(excludeFile)) {
+    const cleaned = fs.readFileSync(excludeFile, "utf8").replace(/# dura-mater:start\n[\s\S]*?# dura-mater:end\n?/g, "");
+    fs.writeFileSync(excludeFile, cleaned);
+  }
   return { project };
 }
 
