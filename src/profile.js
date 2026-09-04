@@ -17,6 +17,13 @@ function promptText(row) {
   return typeof content === "string" ? content : Array.isArray(content) ? content.map((item) => item?.text || "").join(" ") : "";
 }
 
+function safeEvidence(text) {
+  return text.replace(/\bsk-[A-Za-z0-9_-]+\b/g, "[secret]")
+    .replace(/\bBearer\s+[A-Za-z0-9._-]+/gi, "Bearer [secret]")
+    .replace(/\b(password|api[_-]?key|token)\s*[:=]\s*\S+/gi, "$1=[secret]")
+    .replace(/\s+/g, " ").trim().slice(0, 100);
+}
+
 export function extractDecisions(files, max = 200) {
   const decisions = [];
   for (const file of files) {
@@ -30,10 +37,15 @@ export function extractDecisions(files, max = 200) {
     let observedAt;
     try { observedAt = fs.statSync(file).mtime.toISOString(); } catch { continue; }
     for (const [category, pattern] of Object.entries(CATEGORIES)) {
-      if (pattern.test(context)) decisions.push({ category, reviewed, observedAt, evidence: prompts[0].replace(/\s+/g, " ").slice(0, 120), file: path.basename(file) });
+      if (pattern.test(context)) decisions.push({ category, reviewed, observedAt, evidence: safeEvidence(prompts[0]), file: path.basename(file) });
     }
   }
   return decisions.sort((a, b) => b.observedAt.localeCompare(a.observedAt)).slice(0, max);
+}
+
+export function reviewSessions(decisions, category, now = Date.now(), max = 5) {
+  const cutoff = now - 7 * 86400000;
+  return decisions.filter((item) => item.category === category && !item.reviewed && Date.parse(item.observedAt) >= cutoff).slice(0, max);
 }
 
 function atomicWrite(file, text) {
