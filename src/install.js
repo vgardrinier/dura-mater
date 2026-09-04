@@ -99,6 +99,8 @@ export function installProject(projectDir) {
   if (!path.isAbsolute(excludeFile)) excludeFile = path.join(project, excludeFile);
   const config = {
     description: "Dura Mater project coaching hook.",
+    managedBy: "dura-mater",
+    version: 2,
     hooks: {
       UserPromptSubmit: [{ hooks: [{ type: "command", command: '/usr/bin/env node "$(git rev-parse --show-toplevel)/.codex/hooks/dura-mater-hook.cjs"', timeout: 3 }] }],
       PreToolUse: [{ matcher: "Bash|apply_patch", hooks: [{ type: "command", command: '/usr/bin/env node "$(git rev-parse --show-toplevel)/.codex/hooks/dura-mater-hook.cjs"', timeout: 3 }] }],
@@ -107,10 +109,17 @@ export function installProject(projectDir) {
   };
   const wanted = `${JSON.stringify(config, null, 2)}\n`;
   if (fs.existsSync(configFile) && fs.readFileSync(configFile, "utf8") !== wanted) {
-    throw new Error(`${configFile} already exists; left it unchanged`);
+    let existing;
+    try { existing = JSON.parse(fs.readFileSync(configFile, "utf8")); } catch {}
+    if (existing?.managedBy !== "dura-mater" && existing?.description !== "Dura Mater project coaching hook.") {
+      throw new Error(`${configFile} already exists; left it unchanged`);
+    }
   }
   if (fs.existsSync(handlerFile) && fs.readFileSync(handlerFile, "utf8") !== fs.readFileSync(hookTemplate, "utf8")) {
-    throw new Error(`${handlerFile} already exists; left it unchanged`);
+    const existing = fs.readFileSync(handlerFile, "utf8");
+    const owned = existing.includes("// dura-mater-managed:")
+      || (existing.includes("Dura Mater hook skipped:") && existing.includes("dura-mater-${key}.json"));
+    if (!owned) throw new Error(`${handlerFile} already exists; left it unchanged`);
   }
   fs.mkdirSync(hooksDir, { recursive: true });
   fs.writeFileSync(configFile, wanted);
