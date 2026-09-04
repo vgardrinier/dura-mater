@@ -3,6 +3,7 @@ import fs from "node:fs";
 import readline from "node:readline/promises";
 import path from "node:path";
 import { forgetObservation } from "./profile.js";
+import { formatRecallShare, recall } from "./judgments.js";
 
 const paint = (code, text, color) => color ? `\u001b[${code}m${text}\u001b[0m` : text;
 
@@ -103,7 +104,7 @@ export async function onboard(state, input, output, force = false) {
 
 export async function run(args, options = {}) {
   const command = args[0] && !args[0].startsWith("--") ? args[0] : "install";
-  if (!["install", "setup", "uninstall", "profile", "forget", "details", "share", "review"].includes(command)) throw new Error("run `npx dura-mater`, `setup`, `details`, `share`, `review`, `profile`, `forget`, or `uninstall`");
+  if (!["install", "setup", "uninstall", "profile", "forget", "details", "share", "review", "recall"].includes(command)) throw new Error("run `npx dura-mater`, `setup`, `details`, `share`, `review`, `recall`, `profile`, `forget`, or `uninstall`");
   const projectFlag = args.indexOf("--project");
   const project = projectFlag >= 0 ? args[projectFlag + 1] : null;
   if (projectFlag >= 0 && !project) throw new Error("--project needs a path");
@@ -116,6 +117,10 @@ export async function run(args, options = {}) {
   const output = options.output || process.stdout;
   const input = options.input || process.stdin;
   let state = await install(options);
+  if (command === "recall") {
+    await recall(state.target, input, output);
+    return state;
+  }
   if (command === "profile") {
     output.write(fs.readFileSync(path.join(state.target, "LEARNED.md"), "utf8"));
     return state;
@@ -152,7 +157,7 @@ export async function run(args, options = {}) {
   }
   if (command === "share") {
     const craft = statedCraft(fs.readFileSync(state.userFile, "utf8"));
-    output.write(`${formatShare(state.result, color, craft)}\n`);
+    output.write(`${formatRecallShare(state.target) || formatShare(state.result, color, craft)}\n`);
     return state;
   }
   const craft = statedCraft(fs.readFileSync(state.userFile, "utf8"));
