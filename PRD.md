@@ -20,6 +20,8 @@ quickly, delegate heavily, and often cannot tell which parts they truly understa
    prompt or an aggregate score.
 5. `review <category>` opens the evidence path with up to five redacted session
    prompts. `details` holds diagnostics; `share` repeats only the personal fact.
+6. A rare hook question captures the user's next explicit judgment. `recall`
+   tests that call later and shows the first redacted implementation action beside it.
 
 ## Installation and onboarding
 
