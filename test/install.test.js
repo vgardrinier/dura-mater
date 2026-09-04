@@ -3,13 +3,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { detectSources, firstResult, install, installProject, profileNeedsSetup, uninstallProject } from "../src/install.js";
 import { analyzeFiles } from "../src/analyze.js";
-import { formatResult, onboard, run } from "../src/cli.js";
+import { formatInsight, formatResult, formatShare, onboard, run } from "../src/cli.js";
 import { extractDecisions, forgetObservation, updateLearnedProfile } from "../src/profile.js";
+
+function initGit(project) {
+  execFileSync("git", ["init", "-q"], { cwd: project });
+}
 
 test("detects agents without changing their settings", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "dura-detect-"));
@@ -37,7 +41,7 @@ test("install writes local files, reports evidence, and is idempotent", async ()
   assert.match(fs.readFileSync(path.join(target, "VOICE.md"), "utf8"), /live conversation/i);
   assert.equal(JSON.parse(fs.readFileSync(path.join(target, "sources.json"), "utf8"))[0].available, true);
   assert.equal(state.result.total.important, 2);
-  assert.equal(state.result.total.reviewed, 1);
+  assert.equal(state.result.total.reviewed, 2);
   fs.writeFileSync(path.join(target, "USER.md"), "my profile");
   await install({ home, configDir: target });
   assert.equal(fs.readFileSync(path.join(target, "USER.md"), "utf8"), "my profile");
@@ -50,7 +54,7 @@ test("metrics distinguish correction from blind acceptance", () => {
   fs.writeFileSync(reviewed, [
     { type: "event_msg", payload: { type: "user_message", message: "Deploy the auth change" } },
     { type: "response_item", payload: { type: "function_call", name: "exec_command", arguments: "deploy production auth" } },
-    { type: "event_msg", payload: { type: "user_message", message: "Wrong, revert that instead" } },
+    { type: "event_msg", payload: { type: "user_message", message: "Wrong, revert the deploy instead" } },
   ].map(JSON.stringify).join("\n"));
   fs.writeFileSync(blind, [
     { type: "event_msg", payload: { type: "user_message", message: "Update database" } },
@@ -59,7 +63,13 @@ test("metrics distinguish correction from blind acceptance", () => {
   const result = analyzeFiles([reviewed, blind]);
   assert.equal(result.important, 3);
   assert.equal(result.corrected, 1);
-  assert.equal(result.unreviewed, 2);
+  assert.equal(result.unreviewed, 1);
+  assert.equal(result.reviewed + result.unreviewed, result.important);
+  assert.ok(result.corrected <= result.reviewed);
+  for (const facts of Object.values(result.categories)) {
+    assert.equal(facts.reviewed + facts.unreviewed, facts.sessions);
+    assert.ok(facts.corrected <= facts.reviewed);
+  }
 });
 
 test("parses Codex custom tool calls and counts decision topics once", () => {
@@ -67,9 +77,9 @@ test("parses Codex custom tool calls and counts decision topics once", () => {
   const result = analyzeFiles([fixture]);
   assert.equal(result.actions, 2);
   assert.equal(result.important, 3);
-  assert.equal(result.reviewed, 2);
+  assert.equal(result.reviewed, 3);
   assert.equal(result.corrected, 1);
-  assert.equal(result.unreviewed, 1);
+  assert.equal(result.unreviewed, 0);
   assert.equal(result.coverage, 100);
 });
 
@@ -134,9 +144,11 @@ test("aborted placeholder profile resumes and completed setup stays idempotent",
 
 test("project hook installs reversibly and intervenes once", () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-project-"));
+  initGit(project);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-profile-"));
   fs.writeFileSync(path.join(profile, "USER.md"), "## Becoming great at\n\nSecurity architecture\n");
   const installed = installProject(project);
+  assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: project, encoding: "utf8" }), "");
   const config = JSON.parse(fs.readFileSync(installed.configFile, "utf8"));
   assert.ok(config.hooks.UserPromptSubmit);
   assert.ok(config.hooks.PreToolUse);
@@ -153,6 +165,7 @@ test("project hook installs reversibly and intervenes once", () => {
   uninstallProject(project);
   assert.equal(fs.existsSync(installed.configFile), false);
   assert.equal(fs.existsSync(installed.handlerFile), false);
+  assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: project, encoding: "utf8" }), "");
 });
 
 test("learned profile uses at most 200 decisions and preserves USER.md", () => {
@@ -178,6 +191,7 @@ test("learned profile uses at most 200 decisions and preserves USER.md", () => {
 
 test("observations alone cannot trigger, but stated craft personalizes challenge", () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-weight-"));
+  initGit(project);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-weight-profile-"));
   fs.writeFileSync(path.join(profile, "USER.md"), "## You told me\n\n### Becoming great at\n\nVisual design\n");
   fs.writeFileSync(path.join(profile, "LEARNED.md"), "## I've seen\n\nSecurity architecture\n");
@@ -193,7 +207,7 @@ test("observations alone cannot trigger, but stated craft personalizes challenge
   assert.match(invoke("stated", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), /Okay, your call\. How would you design this\?/);
 });
 
-test("non-TTY first run skips questions and ends with spoken activation", async () => {
+test("non-TTY first run skips questions and shows no analytics", async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "dura-nontty-"));
   let shown = "";
   const output = new Writable({ write(chunk, _encoding, done) { shown += chunk.toString(); done(); } });
@@ -202,5 +216,72 @@ test("non-TTY first run skips questions and ends with spoken activation", async 
   input.isTTY = false;
   await run([], { home, configDir: path.join(home, ".dura-mater"), input, output });
   assert.doesNotMatch(shown, /What are you working on/);
-  assert.match(shown.trimEnd(), /Alright\. Get to work\. I'll call you out when you're coasting\.$/);
+  assert.doesNotMatch(shown, /Agent actions|Important decisions|DURA MATER · LAST 7 DAYS/);
+  assert.match(shown, /Setup is unfinished/);
+});
+
+test("setup asks only three questions, then says to start Codex", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "dura-setup-ux-"));
+  const input = new PassThrough(); input.isTTY = true;
+  let shown = "";
+  const output = new Writable({ write(chunk, _encoding, done) { shown += chunk.toString(); done(); } }); output.isTTY = true;
+  setTimeout(() => input.write("A tool\n"), 5);
+  setTimeout(() => input.write("System design\n"), 10);
+  setTimeout(() => input.end("2\n"), 15);
+  await run(["setup"], { home, configDir: path.join(home, ".dura-mater"), input, output });
+  assert.equal((shown.match(/\?/g) || []).length, 3);
+  assert.doesNotMatch(shown, /Agent actions|Important decisions|Coverage/);
+  assert.match(shown.trimEnd(), /You're set\. Start Codex\.$/);
+});
+
+test("normal insight and share use defensible facts", () => {
+  const result = { total: { categories: { data: { sessions: 9, reviewed: 0, unreviewed: 9, corrected: 0 } } }, previous: { categories: { data: { sessions: 4 } } } };
+  assert.equal(formatInsight(result), "You missed 9 Database follow-ups this week.\nDatabase showed up in 9 agent sessions.");
+  const share = formatShare(result, false, "database design");
+  assert.match(share, /^AI worked on database in 9 sessions this week\.\nI didn't follow up in 9\./);
+  assert.match(share, /- Dura Mater/);
+  assert.doesNotMatch(share, /—/);
+  assert.doesNotMatch(share, /score|confidence|coverage/i);
+});
+
+test("declared craft outranks a larger unrelated category", () => {
+  const result = { total: { categories: {
+    access: { sessions: 20, reviewed: 2, unreviewed: 18, corrected: 0 },
+    architecture: { sessions: 12, reviewed: 7, unreviewed: 5, corrected: 1 },
+  } } };
+  assert.equal(formatInsight(result, false, "system design"), "You missed 5 system design follow-ups this week.\nArchitecture showed up in 12 agent sessions.");
+});
+
+test("review queue is bounded and evidence is sanitized", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dura-review-"));
+  const files = [];
+  for (let index = 0; index < 7; index += 1) {
+    const file = path.join(root, `${index}.jsonl`);
+    fs.writeFileSync(file, JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: `Change database password=secret-${index} schema` } }));
+    files.push(file);
+  }
+  const queue = analyzeFiles(files).categories.data.evidence;
+  assert.equal(queue.length, 5);
+  assert.ok(queue.every((item) => item.prompt.includes("password=[secret]")));
+  assert.ok(queue.every((item) => !item.prompt.includes("secret-")));
+  assert.equal(queue.length, Math.min(5, analyzeFiles(files).categories.data.unreviewed));
+});
+
+test("ignores injected history and keeps evidence when category comes from a command", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dura-evidence-"));
+  const meta = path.join(root, "meta.jsonl");
+  fs.writeFileSync(meta, [
+    { type: "event_msg", payload: { type: "user_message", message: "The following is the Codex agent history with database architecture" } },
+    { type: "response_item", payload: { type: "function_call", name: "apply_patch", arguments: "interface schema" } },
+  ].map(JSON.stringify).join("\n"));
+  const real = path.join(root, "real.jsonl");
+  fs.writeFileSync(real, [
+    { type: "event_msg", payload: { type: "user_message", message: "Build the dashboard" } },
+    { type: "response_item", payload: { type: "custom_tool_call", name: "exec", input: "run prisma migration" } },
+  ].map(JSON.stringify).join("\n"));
+  const result = analyzeFiles([meta, real]);
+  assert.equal(result.important, 1);
+  assert.equal(result.categories.data.unreviewed, 1);
+  assert.equal(result.categories.data.evidence[0].prompt, "Build the dashboard");
+  assert.equal(result.categories.architecture, undefined);
 });
