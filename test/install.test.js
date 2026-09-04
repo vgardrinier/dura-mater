@@ -10,6 +10,7 @@ import { detectSources, firstResult, install, installProject, profileNeedsSetup,
 import { analyzeFiles } from "../src/analyze.js";
 import { formatInsight, formatResult, formatShare, onboard, run } from "../src/cli.js";
 import { extractDecisions, forgetObservation, updateLearnedProfile } from "../src/profile.js";
+import { formatRecallShare, isStrongRecall, loadJudgments, loadRecalls, recall } from "../src/judgments.js";
 
 function initGit(project) {
   execFileSync("git", ["init", "-q"], { cwd: project });
@@ -160,12 +161,127 @@ test("project hook installs reversibly and intervenes once", () => {
     env: { ...process.env, DURA_MATER_HOME: profile },
   }).stdout;
   assert.equal(call(fixture("hook-user-prompt.json")), "");
-  assert.match(call(fixture("hook-pre-tool.json")), /Who should have access/);
+  assert.match(call(fixture("hook-pre-tool.json")), /Who can grant access to whom/);
   assert.equal(call(fixture("hook-pre-tool.json")), "");
   uninstallProject(project);
   assert.equal(fs.existsSync(installed.configFile), false);
   assert.equal(fs.existsSync(installed.handlerFile), false);
   assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: project, encoding: "utf8" }), "");
+});
+
+test("hook captures the next explicit judgment with its first implementation action", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-loop-"));
+  initGit(project);
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-loop-profile-"));
+  fs.writeFileSync(path.join(profile, "USER.md"), "## Becoming great at\n\nSecurity architecture\n");
+  const installed = installProject(project);
+  const invoke = (event) => spawnSync(process.execPath, [installed.handlerFile], {
+    input: JSON.stringify({ cwd: project, session_id: "loop", ...event }), encoding: "utf8",
+    env: { ...process.env, DURA_MATER_HOME: profile },
+  }).stdout;
+  invoke({ hook_event_name: "UserPromptSubmit", prompt: "Implement authentication" });
+  assert.match(invoke({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "change auth token=abc123" } }), /Tell me your rule/);
+  assert.match(invoke({ hook_event_name: "UserPromptSubmit", prompt: "Only workspace admins can invite another admin." }), /hold you to that/);
+  assert.equal(invoke({ hook_event_name: "UserPromptSubmit", prompt: "Continue" }), "");
+  const records = loadJudgments(profile);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].category, "access");
+  assert.equal(records[0].answer, "Only workspace admins can invite another admin.");
+  assert.equal(records[0].implementation, "change auth token=[secret]");
+});
+
+test("broad stated craft catches Victor's Google login handoff once", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-victor-"));
+  initGit(project);
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-victor-profile-"));
+  fs.writeFileSync(path.join(profile, "USER.md"), "## You told me\n\n### Working on\n\nDura Mater\n\n### Becoming great at\n\nsystem design and product building\n");
+  const installed = installProject(project);
+  const invoke = (event) => spawnSync(process.execPath, [installed.handlerFile], {
+    input: JSON.stringify({ cwd: project, session_id: "victor", ...event }), encoding: "utf8",
+    env: { ...process.env, DURA_MATER_HOME: profile },
+  }).stdout;
+  invoke({ hook_event_name: "UserPromptSubmit", prompt: "add Google login" });
+  const first = invoke({ hook_event_name: "PreToolUse", tool_name: "apply_patch", tool_input: { command: "*** Update File: auth.js" } });
+  assert.match(first, /What happens if this email already belongs to an account\?/);
+  assert.equal(invoke({ hook_event_name: "PreToolUse", tool_name: "apply_patch", tool_input: { command: "*** Update File: login.js" } }), "");
+});
+
+test("context questions cover consequential failure modes", () => {
+  const cases = [
+    ["invite an admin", "Who can grant access to whom?"],
+    ["migrate the schema", "What must never be lost in this migration?"],
+    ["delete old accounts", "What has to be recoverable?"],
+    ["add payment checkout", "What happens if payment succeeds but the app times out?"],
+    ["change the architecture boundary", "What's the boundary you don't want crossed?"],
+  ];
+  for (const [prompt, expected] of cases) {
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-question-")); initGit(project);
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-question-profile-"));
+    fs.writeFileSync(path.join(profile, "USER.md"), "### Becoming great at\n\nEngineering\n");
+    const installed = installProject(project);
+    const call = (event) => spawnSync(process.execPath, [installed.handlerFile], { input: JSON.stringify({ cwd: project, session_id: prompt, ...event }), encoding: "utf8", env: { ...process.env, DURA_MATER_HOME: profile } }).stdout;
+    call({ hook_event_name: "UserPromptSubmit", prompt: `Please ${prompt}` });
+    assert.match(call({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "work" } }), new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+});
+
+test("project install upgrades Dura-owned hooks but preserves foreign files", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "dura-upgrade-")); initGit(project);
+  const first = installProject(project);
+  fs.writeFileSync(first.handlerFile, "#!/usr/bin/env node\n// dura-mater-managed:v1\n");
+  fs.writeFileSync(first.configFile, `${JSON.stringify({ description: "Dura Mater project coaching hook.", hooks: {} })}\n`);
+  installProject(project);
+  assert.match(fs.readFileSync(first.handlerFile, "utf8"), /dura-mater-managed:v2/);
+  assert.equal(JSON.parse(fs.readFileSync(first.configFile, "utf8")).version, 2);
+  fs.writeFileSync(first.handlerFile, "foreign hook\n");
+  assert.throws(() => installProject(project), /left it unchanged/);
+  assert.equal(fs.readFileSync(first.handlerFile, "utf8"), "foreign hook\n");
+});
+
+test("recall recognizes a conservative content-word match", async () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-recall-"));
+  fs.writeFileSync(path.join(profile, "judgments.jsonl"), `${JSON.stringify({ id: "one", question: "Who should have access?", answer: "Workspace admins control invitations.", implementation: "edit auth policy" })}\n`);
+  const input = new PassThrough(); input.isTTY = true;
+  let shown = "";
+  const output = new Writable({ write(chunk, _encoding, done) { shown += chunk.toString(); done(); } }); output.isTTY = true;
+  setTimeout(() => input.end("Invitations: workspace admins control.\n"), 5);
+  await recall(profile, input, output);
+  assert.match(shown, /Yep\. You remembered it\./);
+  assert.doesNotMatch(shown, /Last time you said/);
+  assert.match(shown, /The agent then started with: edit auth policy/);
+  assert.equal(fs.readFileSync(path.join(profile, "recalls.jsonl"), "utf8").trim().length > 0, true);
+  assert.equal(loadRecalls(profile)[0].matched, true);
+});
+
+test("recall reveals a miss without claiming semantic equivalence", async () => {
+  assert.equal(isStrongRecall("Only workspace admins can invite another admin", "Everyone can invite users"), false);
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "dura-recall-miss-"));
+  fs.writeFileSync(path.join(profile, "judgments.jsonl"), `${JSON.stringify({ id: "one", question: "Who should have access?", answer: "Only workspace admins can invite another admin.", implementation: "edited auth.js" })}\n`);
+  const input = new PassThrough(); input.isTTY = true;
+  let shown = "";
+  const output = new Writable({ write(chunk, _encoding, done) { shown += chunk.toString(); done(); } }); output.isTTY = true;
+  setTimeout(() => input.end("Everyone can invite users.\n"), 5);
+  await recall(profile, input, output);
+  assert.match(shown, /Not the same answer\. Last time you said:\nOnly workspace admins/);
+  assert.match(shown, /The agent then started with: edited auth\.js/);
+  assert.equal(loadRecalls(profile)[0].matched, false);
+});
+
+test("share prefers the latest matched or missed recall", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dura-recall-share-"));
+  const judgment = { id: "one", question: "What happens if this email already belongs to an account?", category: "access", answeredAt: "2026-09-01T10:00:00.000Z", answer: "Link it." };
+  fs.writeFileSync(path.join(root, "judgments.jsonl"), `${JSON.stringify(judgment)}\n`);
+  fs.writeFileSync(path.join(root, "recalls.jsonl"), `${JSON.stringify({ judgmentId: "one", matched: true, recalledAt: "2026-09-07T10:00:00.000Z" })}\n`);
+  assert.equal(formatRecallShare(root), "AI worked on account linking.\nI wrote down the rule. Six days later, I still remembered it.\n- Dura Mater");
+  fs.appendFileSync(path.join(root, "recalls.jsonl"), `${JSON.stringify({ judgmentId: "one", matched: false, recalledAt: "2026-09-07T10:01:00.000Z" })}\n`);
+  assert.equal(formatRecallShare(root), "AI worked on account linking.\nI wrote down the rule. Six days later, I gave a different answer.\n- Dura Mater");
+});
+
+test("share recall card falls back when no recall exists", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dura-no-recall-share-"));
+  assert.equal(formatRecallShare(root), null);
+  const weekly = { total: { categories: { data: { sessions: 2, reviewed: 1, unreviewed: 1, corrected: 0 } } } };
+  assert.match(formatShare(weekly), /AI worked on database in 2 sessions/);
 });
 
 test("learned profile uses at most 200 decisions and preserves USER.md", () => {
@@ -204,7 +320,7 @@ test("observations alone cannot trigger, but stated craft personalizes challenge
   assert.equal(invoke("observed", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), "");
   fs.writeFileSync(path.join(profile, "USER.md"), "## You told me\n\n### Becoming great at\n\nSystems architecture\n");
   invoke("stated", { hook_event_name: "UserPromptSubmit", prompt: "Design the systems architecture" });
-  assert.match(invoke("stated", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), /Okay, your call\. How would you design this\?/);
+  assert.match(invoke("stated", { hook_event_name: "PreToolUse", tool_name: "apply_patch" }), /What's the boundary you don't want crossed\?/);
 });
 
 test("non-TTY first run skips questions and shows no analytics", async () => {
