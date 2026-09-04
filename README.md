@@ -16,14 +16,30 @@ After the package is published, the command will be:
 npx dura-mater
 ```
 
-It detects local Codex and Claude Code sessions, keeps their results separate,
-and shows an honest combined sum. It creates
-`~/.dura-mater/USER.md`, `VOICE.md`, and `sources.json`, then shows agent actions,
-important decisions, review, corrections, and blind acceptance from the last seven
-days. On an interactive first run it asks three short questions, maps coaching
-frequency to an intervention threshold, and stores the answers plainly in
-`USER.md`. The whole flow takes under a minute. Non-interactive runs skip the
-questions safely. `npx dura-mater install` will work too.
+First setup asks three questions, shows no analytics, then tells you to start
+Codex. Later runs prefer the category closest to the craft named in `USER.md`, when
+there is enough evidence. They show where it appeared, which sessions had a visible
+follow-up, and which did not. Raw source diagnostics are
+available only through:
+
+```sh
+node ./bin/dura-mater.js details
+```
+
+Create a compact terminal card containing only that personal fact with:
+
+```sh
+node ./bin/dura-mater.js share
+```
+
+Open up to five recent sessions behind an insight:
+
+```sh
+node ./bin/dura-mater.js review architecture
+```
+
+The list contains a date and a short, locally redacted prompt. It never prints more
+than five sessions.
 
 Running the command again refreshes the sources without overwriting `USER.md` or
 `VOICE.md`.
@@ -72,6 +88,9 @@ node ./bin/dura-mater.js uninstall --project "/absolute/path/to/test-project"
 ```
 
 The hook is project-local in `.codex/hooks.json`; it never edits `~/.codex`.
+Installation adds only those generated paths to the repository's local
+`.git/info/exclude`, so `git status` stays clean. Uninstall removes both files and
+only Dura Mater's exclude block. Existing hook files are never overwritten.
 Codex requires project hooks to be reviewed and trusted. See the
 [official Codex hooks documentation](https://learn.chatgpt.com/docs/hooks).
 
