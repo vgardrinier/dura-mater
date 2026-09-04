@@ -12,12 +12,14 @@ quickly, delegate heavily, and often cannot tell which parts they truly understa
 
 ## Product loop
 
-1. Run one command, show available session evidence, and activate in under a minute.
+1. Setup asks only three questions, then tells the user to start Codex.
 2. Dura Mater silently reads agent sessions and records delegation, review,
    correction, and outcomes.
 3. It coaches only when a consequential decision is being accepted blindly.
-4. `/score` shows clear raw measures and one useful action.
-5. A weekly recap shows how the user's working habits changed.
+4. A normal run leads with one concise, category-specific insight, never a quoted
+   prompt or an aggregate score.
+5. `review <category>` opens the evidence path with up to five redacted session
+   prompts. `details` holds diagnostics; `share` repeats only the personal fact.
 
 ## Installation and onboarding
 
@@ -25,8 +27,8 @@ quickly, delegate heavily, and often cannot tell which parts they truly understa
 npx dura-mater
 ```
 
-The installer detects Codex and Claude Code, starts from existing sessions, and
-shows the first useful result. Local use needs no account.
+The installer detects Codex and Claude Code. Setup never shows analytics. Local
+use needs no account.
 
 On the first interactive run, onboarding asks exactly three short questions: what
 the user is working on, what they want to become great at, and how often coaching
@@ -66,7 +68,18 @@ Never interrupt routine delegated work. Respect coaching intensity and support
 
 ## Measures
 
-Show raw measures before any composite score:
+Raw measures live behind `details` and obey two invariants:
+
+`reviewed + unreviewed = important`, and `corrected <= reviewed`.
+
+For each category, count sessions where it appeared, sessions with and without a
+visible follow-up, and category-named corrections. Compare the prior seven days
+when available. Never claim the agent made a decision; report only observed topics
+and follow-ups.
+When the user's declared craft clearly maps to a category and at least two sessions
+support it, that category outranks unrelated volume.
+
+Diagnostics include:
 
 - agent actions accepted;
 - consequential decisions reviewed;
